@@ -1,14 +1,16 @@
 import java.util.*;
 import java.util.concurrent.*;
 public class Elevator implements Runnable{
-    private int currentFloor;
-    private Direction direction;
+    private int id;
+    private volatile int currentFloor;
+    private volatile Direction direction;
     private BlockingQueue<Integer> upQueue;
     private BlockingQueue<Integer> downQueue;
 
     public Elevator(int id, int floors) {
         this.currentFloor = 0;
         this.direction = Direction.IDLE;
+        this.id = id;
 
         //Stores the current queue for the up cycle.
         this.upQueue = new PriorityBlockingQueue<>();
@@ -30,9 +32,15 @@ public class Elevator implements Runnable{
                     }
                 }
                 //Go through all floor requests.
-                if (downQueue.isEmpty()) {
+                if (direction == Direction.UP && !upQueue.isEmpty()) {
                     moveUp();
-                } else if (upQueue.isEmpty()) {
+                } else if (direction == Direction.DOWN && !downQueue.isEmpty()) {
+                    moveDown();
+                } else if (!upQueue.isEmpty()) {
+                    direction = Direction.UP;
+                    moveUp();
+                } else if (!downQueue.isEmpty()) {
+                    direction = Direction.DOWN;
                     moveDown();
                 }
             }
@@ -54,7 +62,7 @@ public class Elevator implements Runnable{
         //Add requested floor to corresponding queue
         for (int floor: floorRequest) {
             if (floor == this.currentFloor) {
-                return;
+                continue;
             } else if (floor > this.currentFloor) {
                 upQueue.add(floor);
             } else {
@@ -65,6 +73,9 @@ public class Elevator implements Runnable{
                 direction = (floor > this.currentFloor) ? Direction.UP : Direction.DOWN;
             }
         }
+
+        //Wake up elevator if it was waiting
+        notifyAll();
     }
 
     /**
@@ -74,8 +85,8 @@ public class Elevator implements Runnable{
         while (!upQueue.isEmpty()) {
             currentFloor++;
             Thread.sleep(1000);
-            System.out.println("Now on floor " + currentFloor + "!");
-            if (upQueue.peek().equals(currentFloor)) {
+            System.out.println("Elevator " + id + ": Now on floor " + currentFloor + "!");
+            if (!upQueue.isEmpty() && upQueue.peek().equals(currentFloor)) {
                 upQueue.remove();
             }
         }
@@ -85,7 +96,10 @@ public class Elevator implements Runnable{
         while (!downQueue.isEmpty()) {
             currentFloor--;
             Thread.sleep(1000);
-            System.out.println("Now on floor " + currentFloor + "!");
+            System.out.println("Elevator " + id + ": Now on floor " + currentFloor + "!");
+            if (!downQueue.isEmpty() && downQueue.peek().equals(currentFloor)) {
+                downQueue.remove();
+            }
         }
     }
 
@@ -148,11 +162,9 @@ public class Elevator implements Runnable{
                     return timeToFinishDownCycle + timeToTravelBack;
                 }
         }
-        return 0; // Default case
+        return 0;
     }
 
     public int getFloor() {return currentFloor;}
     public Direction getDirection() {return direction;}
-    public BlockingQueue<Integer> getUpQueue() {return upQueue;}
-    public BlockingQueue<Integer> getDownQueue() {return downQueue;}
 }
